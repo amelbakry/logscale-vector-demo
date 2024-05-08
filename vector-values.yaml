@@ -1,0 +1,57 @@
+role: Agent
+
+existingConfigMaps: ["vector"]
+dataDir: "/vector-data-dir"
+
+# extraObjects -- Create extra manifests via values.
+extraObjects:
+- apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: vector
+    labels:
+      grafana_dashboard: "1"
+
+  data:
+    agent.yaml: |
+      data_dir: /vector-data-dir
+      api:
+        enabled: true
+        address: 127.0.0.1:8686
+        playground: false
+      sources:
+        kubernetes_logs:
+          type: kubernetes_logs
+        host_metrics:
+          filesystem:
+            devices:
+              excludes: [binfmt_misc]
+            filesystems:
+              excludes: [binfmt_misc]
+            mountpoints:
+              excludes: ["*/proc/sys/fs/binfmt_misc"]
+          type: host_metrics
+        internal_metrics:
+          type: internal_metrics
+
+      sinks:
+        humio:
+          type: humio_logs
+          inputs:
+          - kubernetes_logs
+          encoding:
+            codec: json
+          compression: gzip
+          host: https://cloud.humio.com
+          token: {{ .Values.humio.token }}
+          buffer:
+            type: disk
+            # max_size MUST be lower than `persistence.size`, otherwise vector-aggregator crashloops
+            max_size: 268435488
+          batch:
+            # 32M is the hard limit https://library.humio.com/falcon-logscale/limits.html#limits-cloud
+            # 5M is the recommended limit https://library.humio.com/falcon-logscale/api-ingest.html#api-ingest-best-practices
+            max_bytes: 5000000
+            max_events: 5000
+            timeout_secs: 5
+
